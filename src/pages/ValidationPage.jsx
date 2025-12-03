@@ -109,7 +109,7 @@ export default function ValidationPage() {
             // Execute both requests in parallel
             const [matchResponse, processResponse] = await Promise.all([
                 fetch(MATCH_URL, { method: 'POST', body: formDataMatch }),
-                fetch(PROCESS_URL, { method: 'POST', body: formDataProcess })
+                fetch(PROCESS_URL, { method: 'POST', body: formDataProcess }),
             ]);
 
             if (!matchResponse.ok) throw new Error(`Error en validación financiera: ${matchResponse.statusText}`);

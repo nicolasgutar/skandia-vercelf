@@ -25,6 +25,7 @@ const LogTable = ({ results, onViewDetail }) => {
                         <tr>
                             <th className="px-4 py-2">Archivo / Radicación</th>
                             <th className="px-4 py-2">ID Log / Banco</th>
+                            <th className="px-4 py-2 text-center">Extracto</th>
                             <th className="px-4 py-2 text-right">Valor Log</th>
                             <th className="px-4 py-2 text-right">Valor PILA</th>
                             <th className="px-4 py-2 text-right">Diferencia</th>
@@ -51,6 +52,13 @@ const LogTable = ({ results, onViewDetail }) => {
                                             </>
                                         ) : (
                                             <span className="text-red-500 text-[10px] font-medium">No encontrado</span>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-2 text-center">
+                                        {logMatch.valido ? (
+                                            <span className="font-mono text-slate-700">{meta.registro_log_completo?.extractoId}</span>
+                                        ) : (
+                                            <span className="text-slate-300">-</span>
                                         )}
                                     </td>
                                     <td className="px-4 py-2 text-right font-mono text-slate-600">
