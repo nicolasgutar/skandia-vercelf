@@ -1,106 +1,58 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutList, FileSpreadsheet, Menu, X, Activity } from 'lucide-react';
+import { LayoutList, FileSpreadsheet, Activity } from 'lucide-react';
 
 export default function Layout() {
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-    const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-
     return (
-        <div className="flex h-screen bg-slate-50 overflow-hidden">
-            {/* Sidebar */}
-            <aside
-                className={`bg-white border-r border-slate-200 transition-all duration-300 ease-in-out flex flex-col z-20
-          ${isSidebarOpen ? 'w-64' : 'w-20'}
-          absolute md:relative h-full shadow-lg md:shadow-none
-        `}
-            >
-                <div className="p-4 flex items-center justify-between border-b border-slate-100 h-16">
-                    <div className={`flex items-center gap-3 ${!isSidebarOpen && 'justify-center w-full'}`}>
-                        <div className="bg-blue-600 p-2 rounded-lg text-white shadow-blue-200 shadow-lg shrink-0">
-                            <Activity size={20} />
+        <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+            {/* Top Navigation Bar */}
+            <header className="bg-white border-b border-slate-200 shadow-sm z-10">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex justify-between h-16">
+                        <div className="flex">
+                            <div className="flex-shrink-0 flex items-center gap-3">
+                                <div className="bg-blue-600 p-2 rounded-lg text-white shadow-blue-200 shadow-lg">
+                                    <Activity size={20} />
+                                </div>
+                                <span className="font-bold text-slate-800 text-lg">Validador</span>
+                            </div>
+                            <div className="hidden sm:ml-10 sm:flex sm:space-x-8">
+                                <NavLink
+                                    to="/"
+                                    className={({ isActive }) =>
+                                        `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors
+                                        ${isActive
+                                            ? 'border-blue-500 text-gray-900'
+                                            : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                                        }`
+                                    }
+                                >
+                                    <LayoutList size={18} className="mr-2" />
+                                    Validación Planillas
+                                </NavLink>
+                                <NavLink
+                                    to="/extractos"
+                                    className={({ isActive }) =>
+                                        `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors
+                                        ${isActive
+                                            ? 'border-blue-500 text-gray-900'
+                                            : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                                        }`
+                                    }
+                                >
+                                    <FileSpreadsheet size={18} className="mr-2" />
+                                    Gestión Extractos
+                                </NavLink>
+                            </div>
                         </div>
-                        {isSidebarOpen && (
-                            <span className="font-bold text-slate-800 text-lg truncate">Validador</span>
-                        )}
                     </div>
-                    {isSidebarOpen && (
-                        <button onClick={toggleSidebar} className="md:hidden text-slate-400 hover:text-slate-600">
-                            <X size={20} />
-                        </button>
-                    )}
                 </div>
-
-                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                    <NavLink
-                        to="/extractos"
-                        className={({ isActive }) =>
-                            `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors
-              ${isActive
-                                ? 'bg-blue-50 text-blue-600 font-medium'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                            }
-              ${!isSidebarOpen && 'justify-center'}
-              `
-                        }
-                    >
-                        <FileSpreadsheet size={20} className="shrink-0" />
-                        {isSidebarOpen && <span>Gestión Extractos</span>}
-                    </NavLink>
-
-                    <NavLink
-                        to="/"
-                        className={({ isActive }) =>
-                            `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors
-              ${isActive
-                                ? 'bg-blue-50 text-blue-600 font-medium'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                            }
-              ${!isSidebarOpen && 'justify-center'}
-              `
-                        }
-                    >
-                        <LayoutList size={20} className="shrink-0" />
-                        {isSidebarOpen && <span>Validación Planillas</span>}
-                    </NavLink>
-                </nav>
-
-                <div className="p-4 border-t border-slate-100">
-                    <button
-                        onClick={toggleSidebar}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors
-              ${!isSidebarOpen && 'justify-center'}
-            `}
-                    >
-                        <Menu size={20} />
-                        {isSidebarOpen && <span className="text-sm">Colapsar menú</span>}
-                    </button>
-                </div>
-            </aside>
+            </header>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-                {/* Mobile Header */}
-                <header className="md:hidden bg-white border-b border-slate-200 p-4 flex items-center gap-3">
-                    <button onClick={toggleSidebar} className="text-slate-600">
-                        <Menu size={24} />
-                    </button>
-                    <span className="font-bold text-slate-800">Validador PILA</span>
-                </header>
-
-                <main className="flex-1 overflow-auto p-4 md:p-8">
-                    <Outlet />
-                </main>
-            </div>
-
-            {/* Overlay for mobile */}
-            {isSidebarOpen && (
-                <div
-                    className="md:hidden fixed inset-0 bg-black/20 z-10"
-                    onClick={toggleSidebar}
-                />
-            )}
+            <main className="flex-1 overflow-auto p-4 md:p-8 max-w-7xl mx-auto w-full">
+                <Outlet />
+            </main>
         </div>
     );
 }
