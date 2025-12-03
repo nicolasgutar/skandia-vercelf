@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutList, FileSpreadsheet, Activity } from 'lucide-react';
+import { LayoutList, FileSpreadsheet, Activity, Blocks } from 'lucide-react';
 
 export default function Layout() {
     return (
@@ -42,6 +42,19 @@ export default function Layout() {
                                 >
                                     <FileSpreadsheet size={18} className="mr-2" />
                                     Gestión Extractos
+                                </NavLink>
+                                <NavLink
+                                    to="/blockchain"
+                                    className={({ isActive }) =>
+                                        `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors
+                                        ${isActive
+                                            ? 'border-blue-500 text-gray-900'
+                                            : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                                        }`
+                                    }
+                                >
+                                    <Blocks size={18} className="mr-2" />
+                                    Blockchain
                                 </NavLink>
                             </div>
                         </div>
