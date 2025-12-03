@@ -8,7 +8,7 @@ import NormativeTable from '../components/NormativeTable';
 import LogFilterTable from '../components/LogFilterTable';
 
 const MATCH_URL = `${import.meta.env.VITE_API_URL}/log-match-bd`;
-const PROCESS_URL = `${import.meta.env.VITE_API_URL}/procesar-planilla`;
+const PROCESS_URL = `https://blockchain.validator.puygroup.com/api/v1/transactions/files/upload `;
 const EXTRACTS_URL = `${import.meta.env.VITE_API_URL}/extractos`;
 const EXPORT_URL = `${import.meta.env.VITE_API_URL}/exportar-excel`;
 
@@ -107,6 +107,7 @@ export default function ValidationPage() {
 
         try {
             // Execute both requests in parallel
+            console.log(PROCESS_URL, formDataProcess);
             const [matchResponse, processResponse] = await Promise.all([
                 fetch(MATCH_URL, { method: 'POST', body: formDataMatch }),
                 fetch(PROCESS_URL, { method: 'POST', body: formDataProcess })

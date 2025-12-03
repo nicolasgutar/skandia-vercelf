@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutList, FileSpreadsheet, Menu, X, Activity } from 'lucide-react';
+import { LayoutList, FileSpreadsheet, Menu, X, Activity, Lock } from 'lucide-react';
 
 export default function Layout() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -63,6 +63,21 @@ export default function Layout() {
                     >
                         <LayoutList size={20} className="shrink-0" />
                         {isSidebarOpen && <span>Validación Planillas</span>}
+                    </NavLink>
+                    <NavLink
+                        to="/blockchain"
+                        className={({ isActive }) =>
+                            `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors
+              ${isActive
+                                ? 'bg-blue-50 text-blue-600 font-medium'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            }
+              ${!isSidebarOpen && 'justify-center'}
+              `
+                        }
+                    >
+                        <Lock size={20} className="shrink-0" />
+                        {isSidebarOpen && <span>Blockchain</span>}
                     </NavLink>
                 </nav>
 
