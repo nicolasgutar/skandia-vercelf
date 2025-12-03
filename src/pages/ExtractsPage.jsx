@@ -24,7 +24,7 @@ export default function ExtractsPage() {
     const fetchExtracts = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`${API_URL}/extractos`);
+            const response = await fetch(`${API_URL}/extractos/`);
             if (!response.ok) throw new Error('Error al cargar extractos');
             const data = await response.json();
             setExtracts(data);

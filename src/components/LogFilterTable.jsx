@@ -72,7 +72,7 @@ export default function LogFilterTable() {
         const fetchExtracts = async () => {
             setLoadingExtracts(true);
             try {
-                const response = await fetch(`${import.meta.env.VITE_API_URL}/extractos`);
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/extractos/`);
                 if (!response.ok) throw new Error('Error al cargar extractos');
                 const data = await response.json();
                 setExtracts(data);
