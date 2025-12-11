@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Upload, FileText, Loader2, FileCheck, XCircle, AlertTriangle, LayoutList, DollarSign, AlertCircle, Grid, FileSpreadsheet, CheckSquare, Square } from 'lucide-react';
+import { Upload, FileText, Loader2, FileCheck, XCircle, AlertTriangle, LayoutList, DollarSign, AlertCircle, Grid, FileSpreadsheet, CheckSquare, Square, UserPlus } from 'lucide-react';
 import DetallePlanilla from '../components/DetallePlanilla';
 import TabButton from '../components/TabButton';
 import R04Table from '../components/R04Table';
@@ -7,8 +7,9 @@ import LogTable from '../components/LogTable';
 import NormativeTable from '../components/NormativeTable';
 import LogFilterTable from '../components/LogFilterTable';
 
+// --- ENDPOINTS ---
 const MATCH_URL = `${import.meta.env.VITE_API_URL}/log-match-bd`;
-const PROCESS_URL = `${import.meta.env.VITE_API_URL}/procesar-planilla`;
+const PROCESS_URL = `${import.meta.env.VITE_API_URL}/procesar-planilla`; // Original endpoint
 const EXTRACTS_URL = `${import.meta.env.VITE_API_URL}/extractos/`;
 const EXPORT_URL = `${import.meta.env.VITE_API_URL}/exportar-excel`;
 
@@ -26,6 +27,10 @@ export default function ValidationPage() {
     const [selectedExtracts, setSelectedExtracts] = useState([]);
     const [loadingExtracts, setLoadingExtracts] = useState(true);
 
+    // --- STATE: Missing Users (Simulated) ---
+    const [foundUsers, setFoundUsers] = useState([]);
+    const [showUserModal, setShowUserModal] = useState(false);
+
     useEffect(() => {
         fetchExtracts();
     }, []);
@@ -37,12 +42,8 @@ export default function ValidationPage() {
             if (!response.ok) throw new Error('Error al cargar extractos');
             const data = await response.json();
             setExtracts(data);
-            // Default to selecting all or none? Let's select none by default or maybe the most recent.
-            // User said: "The user must select at least one extract (or you can default to "All" or the most recent)."
-            // Let's default to empty and require selection.
         } catch (err) {
             console.error("Error fetching extracts:", err);
-            // Don't block the whole app, just show empty list or error in that section
         } finally {
             setLoadingExtracts(false);
         }
@@ -96,8 +97,8 @@ export default function ValidationPage() {
         }
 
         setLoading(true); setError(null); setResults(null);
+        setFoundUsers([]); setShowUserModal(false);
 
-        // Prepare FormData for both requests
         const formDataMatch = new FormData();
         files.forEach(file => formDataMatch.append('archivos', file));
         formDataMatch.append('extracto_ids', selectedExtracts.join(','));
@@ -106,8 +107,7 @@ export default function ValidationPage() {
         files.forEach(file => formDataProcess.append('archivos', file));
 
         try {
-            // Execute both requests in parallel
-            console.log(PROCESS_URL, formDataProcess);
+            // Parallel Fetch
             const [matchResponse, processResponse] = await Promise.all([
                 fetch(MATCH_URL, { method: 'POST', body: formDataMatch }),
                 fetch(PROCESS_URL, { method: 'POST', body: formDataProcess }),
@@ -116,24 +116,48 @@ export default function ValidationPage() {
             if (!matchResponse.ok) throw new Error(`Error en validación financiera: ${matchResponse.statusText}`);
             if (!processResponse.ok) throw new Error(`Error en validación normativa: ${processResponse.statusText}`);
 
-            const matchData = await matchResponse.json();
-            const processData = await processResponse.json();
+            const matchData = await matchResponse.json(); // Dict: { filename: { match_log: ... } }
+            const processData = await processResponse.json(); // Dict: { filename: { parsing_exitoso: ... } }
+
+            // --- SIMULATE User Detection from Parser Results ---
+            const detectedUsers = [];
+            const resultKeys = Object.keys(processData);
+
+            resultKeys.forEach(filename => {
+                const item = processData[filename];
+                if (item.parsing_exitoso && item.raw_parser_output && item.raw_parser_output.tipo1) {
+                    const t1 = item.raw_parser_output.tipo1;
+                    if (t1.num_doc_aportante && t1.razon_social_aportante) {
+                        // Avoid duplicates if needed, or show per file
+                        detectedUsers.push({
+                            num_documento: t1.num_doc_aportante,
+                            tipo_documento: t1.tipo_doc_aportante,
+                            nombre: t1.razon_social_aportante,
+                            filename: filename
+                        });
+                    }
+                }
+            });
+
+            // Logic: Always show modal if users found (per user request)
+            if (detectedUsers.length > 0) {
+                setFoundUsers(detectedUsers);
+                setShowUserModal(true);
+            }
 
             // Merge results
-            // Assuming both return objects keyed by filename
             const mergedResults = {};
-
-            // Get all unique filenames from both responses
             const allFiles = new Set([...Object.keys(matchData), ...Object.keys(processData)]);
 
             allFiles.forEach(filename => {
                 mergedResults[filename] = {
-                    ...(processData[filename] || {}), // Base validations
-                    match_log: matchData[filename]?.match_log || null // Override/Add match_log from match endpoint
+                    ...(processData[filename] || {}), // Parsing/Validation results
+                    match_log: matchData[filename]?.match_log || null // Financial match
                 };
             });
 
             setResults(mergedResults);
+
         } catch (err) {
             console.error(err);
             setError(err.message || "Error al conectar con la API");
@@ -142,16 +166,17 @@ export default function ValidationPage() {
         }
     };
 
+    const handleConfirmUsers = () => {
+        // Just close the modal since we can't create them in DB
+        setShowUserModal(false);
+    };
+
+
     const exportExcel = async () => {
         if (files.length === 0) return;
         setLoading(true); setError(null);
         const formData = new FormData();
         files.forEach(file => formData.append('archivos', file));
-        // Export might not need extracts if it's just exporting the validation results which we already have? 
-        // Or does it re-process? The original code re-sent files. 
-        // Assuming export endpoint handles it. If it needs extracts, we might need to update it too.
-        // For now, leaving as is, but if export depends on the new validation logic, it might need update.
-        // The user didn't specify changes to export, so I'll leave it.
 
         try {
             const response = await fetch(EXPORT_URL, { method: 'POST', body: formData });
@@ -174,7 +199,6 @@ export default function ValidationPage() {
         }
     };
 
-    // --- Tab Calculation ---
     const getAlertCount = (key) => {
         if (!results) return 0;
         return Object.values(results).reduce((acc, curr) => {
@@ -192,8 +216,60 @@ export default function ValidationPage() {
                 </div>
             </div>
 
+            {/* --- USER INFO MODAL (Simulated) --- */}
+            {showUserModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center gap-3 text-blue-600 mb-4">
+                            <AlertTriangle size={32} />
+                            <h2 className="text-xl font-bold text-slate-800">Aportantes Identificados</h2>
+                        </div>
+
+                        <p className="text-slate-600 mb-4">
+                            Se ha extraído la siguiente información de los archivos procesados.
+                            Revisa los datos antes de continuar.
+                        </p>
+
+                        <div className="bg-slate-50 rounded-lg border border-slate-200 max-h-[300px] overflow-y-auto mb-6">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-slate-100 text-slate-500 font-medium">
+                                    <tr>
+                                        <th className="px-4 py-2">Documento</th>
+                                        <th className="px-4 py-2">Razón Social / Nombre</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200">
+                                    {foundUsers.map((u, i) => (
+                                        <tr key={i}>
+                                            <td className="px-4 py-2 font-mono text-slate-600">{u.tipo_documento} {u.num_documento}</td>
+                                            <td className="px-4 py-2 font-medium text-slate-800">{u.nombre}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowUserModal(false)}
+                                className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-medium"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmUsers}
+                                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 shadow-sm"
+                            >
+                                <UserPlus size={18} />
+                                Confirmar y Ver Resultados
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex flex-col gap-6">
-                {/* Extract Selection - Full Width and Larger */}
+                {/* Extract Selection */}
                 <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                         <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
@@ -291,7 +367,6 @@ export default function ValidationPage() {
                                     ))}
                                 </div>
 
-                                {/* Action Buttons - Below Files */}
                                 <div className="flex justify-end gap-3 pt-2">
                                     <button
                                         onClick={exportExcel}
@@ -301,7 +376,7 @@ export default function ValidationPage() {
                                         <FileSpreadsheet size={18} /> Exportar
                                     </button>
                                     <button
-                                        onClick={processFiles}
+                                        onClick={() => processFiles()}
                                         disabled={loading}
                                         className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
                                     >
@@ -321,10 +396,8 @@ export default function ValidationPage() {
                 </div>
             )}
 
-            {/* Detailed Results Section */}
             {results && (
                 <section className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[500px]">
-                    {/* Tabs */}
                     <div className="flex overflow-x-auto border-b border-slate-200 scrollbar-hide">
                         <TabButton
                             active={activeTab === 'R04'}
@@ -377,7 +450,6 @@ export default function ValidationPage() {
                         />
                     </div>
 
-                    {/* Table Content */}
                     <div className="p-0 flex-1">
                         {activeTab === 'R04' && <R04Table results={results} onViewDetail={setSelectedPlanilla} />}
                         {activeTab === 'MATRIZ' && <NormativeTable results={results} validationKey="resultado_matriz" onViewDetail={setSelectedPlanilla} />}
@@ -394,7 +466,6 @@ export default function ValidationPage() {
                 </section>
             )}
 
-            {/* Log Filter Table */}
             <LogFilterTable />
 
             {selectedPlanilla && (
