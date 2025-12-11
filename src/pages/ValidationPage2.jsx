@@ -222,12 +222,11 @@ export default function ValidationPage() {
                     <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 animate-in fade-in zoom-in duration-200">
                         <div className="flex items-center gap-3 text-blue-600 mb-4">
                             <AlertTriangle size={32} />
-                            <h2 className="text-xl font-bold text-slate-800">Aportantes Identificados</h2>
+                            <h2 className="text-xl font-bold text-slate-800">Usuarios No Registrados Detectados</h2>
                         </div>
 
                         <p className="text-slate-600 mb-4">
-                            Se ha extraído la siguiente información de los archivos procesados.
-                            Revisa los datos antes de continuar.
+                            Se han encontrado usuarios en las planillas que aun no estaban registrados en base de datos. ¿Desea crearlos y proceder?
                         </p>
 
                         <div className="bg-slate-50 rounded-lg border border-slate-200 max-h-[300px] overflow-y-auto mb-6">
@@ -252,16 +251,16 @@ export default function ValidationPage() {
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={() => setShowUserModal(false)}
-                                className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-medium"
+                                className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium"
                             >
-                                Cancelar
+                                Denegar
                             </button>
                             <button
                                 onClick={handleConfirmUsers}
                                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 shadow-sm"
                             >
                                 <UserPlus size={18} />
-                                Confirmar y Ver Resultados
+                                Aceptar y Continuar
                             </button>
                         </div>
                     </div>
