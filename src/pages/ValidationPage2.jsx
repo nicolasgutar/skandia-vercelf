@@ -1,5 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Upload, FileText, Loader2, FileCheck, XCircle, AlertTriangle, LayoutList, DollarSign, AlertCircle, Grid, FileSpreadsheet, CheckSquare, Square, UserPlus } from 'lucide-react';
+import {
+    Upload, FileText, Loader2, FileCheck, XCircle, AlertTriangle,
+    LayoutList, DollarSign, AlertCircle, Grid, FileSpreadsheet,
+    CheckSquare, Square, UserPlus, FileJson // <--- Add FileJson
+} from 'lucide-react';
 import DetallePlanilla from '../components/DetallePlanilla';
 import TabButton from '../components/TabButton';
 import R04Table from '../components/R04Table';
@@ -9,9 +13,10 @@ import LogFilterTable from '../components/LogFilterTable';
 
 // --- ENDPOINTS ---
 const MATCH_URL = `${import.meta.env.VITE_API_URL}/log-match-bd`;
-const PROCESS_URL = `${import.meta.env.VITE_API_URL}/procesar-planilla`; // Original endpoint
+const PROCESS_URL = `${import.meta.env.VITE_API_URL}/procesar-planilla`;
 const EXTRACTS_URL = `${import.meta.env.VITE_API_URL}/extractos/`;
 const EXPORT_URL = `${import.meta.env.VITE_API_URL}/exportar-excel`;
+const EXTRACT_400_URL = `${import.meta.env.VITE_API_URL}/extraer-cuatrocientos`;
 
 export default function ValidationPage() {
     const [files, setFiles] = useState([]);
@@ -171,6 +176,36 @@ export default function ValidationPage() {
         setShowUserModal(false);
     };
 
+    const exportJSON = async () => {
+        if (files.length === 0) return;
+        setLoading(true); setError(null);
+
+        const formData = new FormData();
+        files.forEach(file => formData.append('archivos', file));
+        try {
+            const response = await fetch(EXTRACT_400_URL, { method: 'POST', body: formData });
+            if (!response.ok) throw new Error(`Error del servidor: ${response.statusText}`);
+            const data = await response.json();
+
+            // Create a blob from the JSON data and trigger download
+            const jsonString = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonString], { type: "application/json" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "extraccion_400.json";
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+        } catch (err) {
+            console.error(err);
+            setError(err.message || "Error al exportar JSON");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const exportExcel = async () => {
         if (files.length === 0) return;
@@ -367,13 +402,22 @@ export default function ValidationPage() {
                                 </div>
 
                                 <div className="flex justify-end gap-3 pt-2">
+                                    {/* New Export JSON Button */}
+                                    <button
+                                        onClick={exportJSON}
+                                        disabled={loading}
+                                        className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-lg font-medium shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                        <FileJson size={18} /> Exportar JSON
+                                    </button>
                                     <button
                                         onClick={exportExcel}
                                         disabled={loading}
                                         className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-medium shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
                                     >
-                                        <FileSpreadsheet size={18} /> Exportar
+                                        <FileSpreadsheet size={18} /> Exportar Excel
                                     </button>
+
                                     <button
                                         onClick={() => processFiles()}
                                         disabled={loading}
@@ -382,6 +426,8 @@ export default function ValidationPage() {
                                         {loading ? <><Loader2 size={18} className="animate-spin" /> Procesando...</> : <><FileCheck size={18} /> Conciliar</>}
                                     </button>
                                 </div>
+
+
                             </div>
                         )}
                     </div>
