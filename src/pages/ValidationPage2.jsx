@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
     Upload, FileText, Loader2, FileCheck, XCircle, AlertTriangle,
     LayoutList, DollarSign, AlertCircle, Grid, FileSpreadsheet,
-    CheckSquare, Square, UserPlus, FileJson // <--- Add FileJson
+    CheckSquare, Square, UserPlus, FileJson, PiggyBank
 } from 'lucide-react';
 import DetallePlanilla from '../components/DetallePlanilla';
 import TabButton from '../components/TabButton';
@@ -10,14 +10,12 @@ import R04Table from '../components/R04Table';
 import LogTable from '../components/LogTable';
 import NormativeTable from '../components/NormativeTable';
 import LogFilterTable from '../components/LogFilterTable';
-
 // --- ENDPOINTS ---
 const MATCH_URL = `${import.meta.env.VITE_API_URL}/log-match-bd`;
-const PROCESS_URL = `${import.meta.env.VITE_API_URL}/procesar-planilla`;
+const PROCESS_URL = `${import.meta.env.VITE_API_URL}/procesar-planilla-2`; // MIGRATED TO V2
 const EXTRACTS_URL = `${import.meta.env.VITE_API_URL}/extractos/`;
 const EXPORT_URL = `${import.meta.env.VITE_API_URL}/exportar-excel`;
 const EXTRACT_400_URL = `${import.meta.env.VITE_API_URL}/extraer-cuatrocientos`;
-
 export default function ValidationPage() {
     const [files, setFiles] = useState([]);
     const [results, setResults] = useState(null);
@@ -26,20 +24,17 @@ export default function ValidationPage() {
     const [dragActive, setDragActive] = useState(false);
     const [activeTab, setActiveTab] = useState('R04');
     const [selectedPlanilla, setSelectedPlanilla] = useState(null);
-
     // Extract Selection State
     const [extracts, setExtracts] = useState([]);
     const [selectedExtracts, setSelectedExtracts] = useState([]);
     const [loadingExtracts, setLoadingExtracts] = useState(true);
-
-    // --- STATE: Missing Users (Simulated) ---
+    // --- STATE: Missing Users & Totals ---
     const [foundUsers, setFoundUsers] = useState([]);
     const [showUserModal, setShowUserModal] = useState(false);
-
+    const [totals, setTotals] = useState({ acreditar: 0, rezagos: 0 }); // NEW STATE FOR TOTALS
     useEffect(() => {
         fetchExtracts();
     }, []);
-
     const fetchExtracts = async () => {
         try {
             setLoadingExtracts(true);
@@ -53,13 +48,11 @@ export default function ValidationPage() {
             setLoadingExtracts(false);
         }
     };
-
     const toggleExtract = (id) => {
         setSelectedExtracts(prev =>
             prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
         );
     };
-
     const toggleAllExtracts = () => {
         if (selectedExtracts.length === extracts.length) {
             setSelectedExtracts([]);
@@ -67,14 +60,12 @@ export default function ValidationPage() {
             setSelectedExtracts(extracts.map(e => e.id));
         }
     };
-
     // --- File Handling Handlers ---
     const handleDrag = useCallback((e) => {
         e.preventDefault(); e.stopPropagation();
         if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
         else if (e.type === "dragleave") setDragActive(false);
     }, []);
-
     const handleDrop = useCallback((e) => {
         e.preventDefault(); e.stopPropagation();
         setDragActive(false);
@@ -83,16 +74,13 @@ export default function ValidationPage() {
             setFiles(prev => [...prev, ...newFiles]);
         }
     }, []);
-
     const handleChange = (e) => {
         if (e.target.files && e.target.files[0]) {
             const newFiles = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.txt'));
             setFiles(prev => [...prev, ...newFiles]);
         }
     };
-
     const removeFile = (index) => setFiles(prev => prev.filter((_, i) => i !== index));
-
     // --- API Handler ---
     const processFiles = async () => {
         if (files.length === 0) return;
@@ -100,69 +88,46 @@ export default function ValidationPage() {
             setError("Debes seleccionar al menos un extracto para la conciliación.");
             return;
         }
-
         setLoading(true); setError(null); setResults(null);
         setFoundUsers([]); setShowUserModal(false);
-
+        setTotals({ acreditar: 0, rezagos: 0 }); // Reset totals
         const formDataMatch = new FormData();
         files.forEach(file => formDataMatch.append('archivos', file));
         formDataMatch.append('extracto_ids', selectedExtracts.join(','));
-
         const formDataProcess = new FormData();
         files.forEach(file => formDataProcess.append('archivos', file));
-
         try {
             // Parallel Fetch
             const [matchResponse, processResponse] = await Promise.all([
                 fetch(MATCH_URL, { method: 'POST', body: formDataMatch }),
                 fetch(PROCESS_URL, { method: 'POST', body: formDataProcess }),
             ]);
-
             if (!matchResponse.ok) throw new Error(`Error en validación financiera: ${matchResponse.statusText}`);
             if (!processResponse.ok) throw new Error(`Error en validación normativa: ${processResponse.statusText}`);
-
-            const matchData = await matchResponse.json(); // Dict: { filename: { match_log: ... } }
-            const processData = await processResponse.json(); // Dict: { filename: { parsing_exitoso: ... } }
-
-            // --- SIMULATE User Detection from Parser Results ---
-            const detectedUsers = [];
-            const resultKeys = Object.keys(processData);
-
-            resultKeys.forEach(filename => {
-                const item = processData[filename];
-                if (item.parsing_exitoso && item.raw_parser_output && item.raw_parser_output.tipo1) {
-                    const t1 = item.raw_parser_output.tipo1;
-                    if (t1.num_doc_aportante && t1.razon_social_aportante) {
-                        // Avoid duplicates if needed, or show per file
-                        detectedUsers.push({
-                            num_documento: t1.num_doc_aportante,
-                            tipo_documento: t1.tipo_doc_aportante,
-                            nombre: t1.razon_social_aportante,
-                            filename: filename
-                        });
-                    }
-                }
-            });
-
-            // Logic: Always show modal if users found (per user request)
-            if (detectedUsers.length > 0) {
-                setFoundUsers(detectedUsers);
+            const matchData = await matchResponse.json();
+            const processDataRaw = await processResponse.json();
+            // Extract logic from V2 response
+            const processDataDict = processDataRaw.results || [];
+            const missingUsersList = processDataRaw.missing_users || [];
+            const totalAcreditar = processDataRaw.total_acreditar || 0;
+            const totalRezagos = processDataRaw.total_rezagos || 0;
+            // Set Totals
+            setTotals({ acreditar: totalAcreditar, rezagos: totalRezagos });
+            // Handle Missing Users (from API)
+            if (missingUsersList.length > 0) {
+                setFoundUsers(missingUsersList);
                 setShowUserModal(true);
             }
-
             // Merge results
             const mergedResults = {};
-            const allFiles = new Set([...Object.keys(matchData), ...Object.keys(processData)]);
-
+            const allFiles = new Set([...Object.keys(matchData), ...Object.keys(processDataDict)]);
             allFiles.forEach(filename => {
                 mergedResults[filename] = {
-                    ...(processData[filename] || {}), // Parsing/Validation results
+                    ...(processDataDict[filename] || {}), // Parsing/Validation results
                     match_log: matchData[filename]?.match_log || null // Financial match
                 };
             });
-
             setResults(mergedResults);
-
         } catch (err) {
             console.error(err);
             setError(err.message || "Error al conectar con la API");
@@ -170,23 +135,19 @@ export default function ValidationPage() {
             setLoading(false);
         }
     };
-
     const handleConfirmUsers = () => {
-        // Just close the modal since we can't create them in DB
+        // Just close the modal since we can't create them in DB or the logic is not fully specified for creation flow here
         setShowUserModal(false);
     };
-
     const exportJSON = async () => {
         if (files.length === 0) return;
         setLoading(true); setError(null);
-
         const formData = new FormData();
         files.forEach(file => formData.append('archivos', file));
         try {
             const response = await fetch(EXTRACT_400_URL, { method: 'POST', body: formData });
             if (!response.ok) throw new Error(`Error del servidor: ${response.statusText}`);
             const data = await response.json();
-
             // Create a blob from the JSON data and trigger download
             const jsonString = JSON.stringify(data, null, 2);
             const blob = new Blob([jsonString], { type: "application/json" });
@@ -198,7 +159,6 @@ export default function ValidationPage() {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-
         } catch (err) {
             console.error(err);
             setError(err.message || "Error al exportar JSON");
@@ -206,17 +166,14 @@ export default function ValidationPage() {
             setLoading(false);
         }
     };
-
     const exportExcel = async () => {
         if (files.length === 0) return;
         setLoading(true); setError(null);
         const formData = new FormData();
         files.forEach(file => formData.append('archivos', file));
-
         try {
             const response = await fetch(EXPORT_URL, { method: 'POST', body: formData });
             if (!response.ok) throw new Error(`Error del servidor: ${response.statusText}`);
-
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -233,7 +190,6 @@ export default function ValidationPage() {
             setLoading(false);
         }
     };
-
     const getAlertCount = (key) => {
         if (!results) return 0;
         return Object.values(results).reduce((acc, curr) => {
@@ -241,7 +197,6 @@ export default function ValidationPage() {
             return acc + (!curr[key]?.valido ? 1 : 0);
         }, 0);
     };
-
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -250,26 +205,28 @@ export default function ValidationPage() {
                     <p className="text-slate-500">Carga planillas PILA y selecciona extractos para conciliar</p>
                 </div>
             </div>
-
-            {/* --- USER INFO MODAL (Simulated) --- */}
+            {/* --- USER ALERT MODAL --- */}
             {showUserModal && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 animate-in fade-in zoom-in duration-200">
-                        <div className="flex items-center gap-3 text-blue-600 mb-4">
+                        <div className="flex items-center gap-3 text-amber-600 mb-4">
                             <AlertTriangle size={32} />
-                            <h2 className="text-xl font-bold text-slate-800">Usuarios No Registrados Detectados</h2>
+                            {/* Title Update */}
+                            <h2 className="text-xl font-bold text-slate-800">Actualización de Usuarios Requerida</h2>
                         </div>
-
+                        {/* Message Update */}
                         <p className="text-slate-600 mb-4">
-                            Se han encontrado usuarios en las planillas que aun no estaban registrados en base de datos. ¿Desea crearlos y proceder?
+                            La información de los siguientes usuarios registrados no coincide con SIAFP y debe ser actualizada.
                         </p>
-
                         <div className="bg-slate-50 rounded-lg border border-slate-200 max-h-[300px] overflow-y-auto mb-6">
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-slate-100 text-slate-500 font-medium">
                                     <tr>
                                         <th className="px-4 py-2">Documento</th>
                                         <th className="px-4 py-2">Razón Social / Nombre</th>
+                                        <th className="px-4 py-2">Archivo Origen</th>
+                                        <th className="px-4 py-2 text-center">En Puy</th>
+                                        <th className="px-4 py-2 text-center">En SIAFP</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200">
@@ -277,31 +234,37 @@ export default function ValidationPage() {
                                         <tr key={i}>
                                             <td className="px-4 py-2 font-mono text-slate-600">{u.tipo_documento} {u.num_documento}</td>
                                             <td className="px-4 py-2 font-medium text-slate-800">{u.nombre}</td>
+                                            <td className="px-4 py-2 text-slate-500 text-xs">{u.archivo_origen}</td>
+
+                                            {/* ADDED CELLS */}
+                                            <td className="px-4 py-2 text-center">
+                                                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${u.en_puy === 'Skandia' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                    {u.en_puy || 'N/A'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-2 text-center">
+                                                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${u.en_siafp === 'Skandia' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                                                    }`}>
+                                                    {u.en_siafp || 'N/A'}
+                                                </span>
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
-
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={() => setShowUserModal(false)}
-                                className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium"
+                                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
                             >
-                                Denegar
-                            </button>
-                            <button
-                                onClick={handleConfirmUsers}
-                                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 shadow-sm"
-                            >
-                                <UserPlus size={18} />
-                                Aceptar y Continuar
+                                Cerrar
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-
             <div className="flex flex-col gap-6">
                 {/* Extract Selection */}
                 <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -317,7 +280,6 @@ export default function ValidationPage() {
                             {selectedExtracts.length === extracts.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
                         </button>
                     </div>
-
                     <div className="p-4 max-h-[300px] overflow-y-auto">
                         {loadingExtracts ? (
                             <div className="p-8 flex justify-center text-slate-400">
@@ -355,11 +317,7 @@ export default function ValidationPage() {
                             </div>
                         )}
                     </div>
-                    <div className="p-3 bg-slate-50 border-t border-slate-100 text-sm text-center text-slate-500 font-medium">
-                        {selectedExtracts.length} extractos seleccionados
-                    </div>
                 </section>
-
                 {/* Upload Section */}
                 <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="p-6">
@@ -367,7 +325,6 @@ export default function ValidationPage() {
                             <Upload size={20} className="text-blue-600" />
                             Cargar Archivos PILA
                         </h2>
-
                         <div
                             className={`relative border-2 border-dashed rounded-xl p-8 transition-colors text-center ${dragActive ? "border-blue-500 bg-blue-50" : "border-slate-300 hover:border-blue-400 hover:bg-slate-50"
                                 }`}
@@ -384,7 +341,6 @@ export default function ValidationPage() {
                                 </div>
                             </div>
                         </div>
-
                         {files.length > 0 && (
                             <div className="mt-6 space-y-4">
                                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
@@ -400,9 +356,7 @@ export default function ValidationPage() {
                                         </div>
                                     ))}
                                 </div>
-
                                 <div className="flex justify-end gap-3 pt-2">
-                                    {/* New Export JSON Button */}
                                     <button
                                         onClick={exportJSON}
                                         disabled={loading}
@@ -417,7 +371,6 @@ export default function ValidationPage() {
                                     >
                                         <FileSpreadsheet size={18} /> Exportar Excel
                                     </button>
-
                                     <button
                                         onClick={() => processFiles()}
                                         disabled={loading}
@@ -426,93 +379,116 @@ export default function ValidationPage() {
                                         {loading ? <><Loader2 size={18} className="animate-spin" /> Procesando...</> : <><FileCheck size={18} /> Conciliar</>}
                                     </button>
                                 </div>
-
-
                             </div>
                         )}
                     </div>
                 </section>
             </div>
-
             {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-start gap-3">
                     <AlertTriangle className="shrink-0 mt-0.5" />
                     <div><h3 className="font-bold">Error</h3><p>{error}</p></div>
                 </div>
             )}
-
             {results && (
-                <section className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[500px]">
-                    <div className="flex overflow-x-auto border-b border-slate-200 scrollbar-hide">
-                        <TabButton
-                            active={activeTab === 'R04'}
-                            onClick={() => setActiveTab('R04')}
-                            icon={LayoutList}
-                            label="R04: Consistencia"
-                            alertCount={getAlertCount('resultado_r04')}
-                        />
-                        <TabButton
-                            active={activeTab === 'MATRIZ'}
-                            onClick={() => setActiveTab('MATRIZ')}
-                            icon={Grid}
-                            label="Matriz"
-                            alertCount={getAlertCount('resultado_matriz')}
-                        />
-                        <TabButton
-                            active={activeTab === 'LOG'}
-                            onClick={() => setActiveTab('LOG')}
-                            icon={DollarSign}
-                            label="Cruce Financiero"
-                            alertCount={getAlertCount('LOG')}
-                        />
-                        <TabButton
-                            active={activeTab === 'R05'}
-                            onClick={() => setActiveTab('R05')}
-                            icon={AlertCircle}
-                            label="R05: Límites IBC"
-                            alertCount={getAlertCount('resultado_r05')}
-                        />
-                        <TabButton
-                            active={activeTab === 'R06'}
-                            onClick={() => setActiveTab('R06')}
-                            icon={AlertCircle}
-                            label="R06: Días Cotizados"
-                            alertCount={getAlertCount('resultado_r06')}
-                        />
-                        <TabButton
-                            active={activeTab === 'R07'}
-                            onClick={() => setActiveTab('R07')}
-                            icon={AlertCircle}
-                            label="R07: Tarifas"
-                            alertCount={getAlertCount('resultado_r07')}
-                        />
-                        <TabButton
-                            active={activeTab === 'R08'}
-                            onClick={() => setActiveTab('R08')}
-                            icon={AlertCircle}
-                            label="R08: Aritmética"
-                            alertCount={getAlertCount('resultado_r08')}
-                        />
+                <>
+                    <section className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[500px]">
+                        <div className="flex overflow-x-auto border-b border-slate-200 scrollbar-hide">
+                            <TabButton
+                                active={activeTab === 'R04'}
+                                onClick={() => setActiveTab('R04')}
+                                icon={LayoutList}
+                                label="R04: Consistencia"
+                                alertCount={getAlertCount('resultado_r04')}
+                            />
+                            <TabButton
+                                active={activeTab === 'MATRIZ'}
+                                onClick={() => setActiveTab('MATRIZ')}
+                                icon={Grid}
+                                label="Matriz"
+                                alertCount={getAlertCount('resultado_matriz')}
+                            />
+                            <TabButton
+                                active={activeTab === 'LOG'}
+                                onClick={() => setActiveTab('LOG')}
+                                icon={DollarSign}
+                                label="Cruce Financiero"
+                                alertCount={getAlertCount('LOG')}
+                            />
+                            <TabButton
+                                active={activeTab === 'R05'}
+                                onClick={() => setActiveTab('R05')}
+                                icon={AlertCircle}
+                                label="R05: Límites IBC"
+                                alertCount={getAlertCount('resultado_r05')}
+                            />
+                            <TabButton
+                                active={activeTab === 'R06'}
+                                onClick={() => setActiveTab('R06')}
+                                icon={AlertCircle}
+                                label="R06: Días Cotizados"
+                                alertCount={getAlertCount('resultado_r06')}
+                            />
+                            <TabButton
+                                active={activeTab === 'R07'}
+                                onClick={() => setActiveTab('R07')}
+                                icon={AlertCircle}
+                                label="R07: Tarifas"
+                                alertCount={getAlertCount('resultado_r07')}
+                            />
+                            <TabButton
+                                active={activeTab === 'R08'}
+                                onClick={() => setActiveTab('R08')}
+                                icon={AlertCircle}
+                                label="R08: Aritmética"
+                                alertCount={getAlertCount('resultado_r08')}
+                            />
+                        </div>
+                        <div className="p-0 flex-1">
+                            {activeTab === 'R04' && <R04Table results={results} onViewDetail={setSelectedPlanilla} />}
+                            {activeTab === 'MATRIZ' && <NormativeTable results={results} validationKey="resultado_matriz" onViewDetail={setSelectedPlanilla} />}
+                            {activeTab === 'LOG' && <LogTable results={results} onViewDetail={setSelectedPlanilla} />}
+                            {activeTab === 'R05' && <NormativeTable results={results} validationKey="resultado_r05" onViewDetail={setSelectedPlanilla} />}
+                            {activeTab === 'R06' && <NormativeTable results={results} validationKey="resultado_r06" onViewDetail={setSelectedPlanilla} />}
+                            {activeTab === 'R07' && <NormativeTable results={results} validationKey="resultado_r07" onViewDetail={setSelectedPlanilla} />}
+                            {activeTab === 'R08' && <NormativeTable results={results} validationKey="resultado_r08" onViewDetail={setSelectedPlanilla} />}
+                        </div>
+                        <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 text-xs text-slate-500">
+                            Total procesados: {Object.keys(results).length} documentos
+                        </div>
+                    </section>
+                    {/* --- TOTALS SECTION --- */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-green-50 border border-green-200 rounded-xl p-6 flex items-center justify-between">
+                            <div>
+                                <p className="text-green-600 font-medium mb-1 flex items-center gap-2">
+                                    <CheckSquare size={18} /> Total Acreditar
+                                </p>
+                                <h3 className="text-3xl font-bold text-green-700">
+                                    ${totals.acreditar.toLocaleString('es-CO', { minimumFractionDigits: 0 })}
+                                </h3>
+                            </div>
+                            <div className="bg-green-100 p-3 rounded-full text-green-600">
+                                <DollarSign size={32} />
+                            </div>
+                        </div>
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-center justify-between">
+                            <div>
+                                <p className="text-amber-600 font-medium mb-1 flex items-center gap-2">
+                                    <AlertCircle size={18} /> Total Rezagos
+                                </p>
+                                <h3 className="text-3xl font-bold text-amber-700">
+                                    ${totals.rezagos.toLocaleString('es-CO', { minimumFractionDigits: 0 })}
+                                </h3>
+                            </div>
+                            <div className="bg-amber-100 p-3 rounded-full text-amber-600">
+                                <PiggyBank size={32} />
+                            </div>
+                        </div>
                     </div>
-
-                    <div className="p-0 flex-1">
-                        {activeTab === 'R04' && <R04Table results={results} onViewDetail={setSelectedPlanilla} />}
-                        {activeTab === 'MATRIZ' && <NormativeTable results={results} validationKey="resultado_matriz" onViewDetail={setSelectedPlanilla} />}
-                        {activeTab === 'LOG' && <LogTable results={results} onViewDetail={setSelectedPlanilla} />}
-                        {activeTab === 'R05' && <NormativeTable results={results} validationKey="resultado_r05" onViewDetail={setSelectedPlanilla} />}
-                        {activeTab === 'R06' && <NormativeTable results={results} validationKey="resultado_r06" onViewDetail={setSelectedPlanilla} />}
-                        {activeTab === 'R07' && <NormativeTable results={results} validationKey="resultado_r07" onViewDetail={setSelectedPlanilla} />}
-                        {activeTab === 'R08' && <NormativeTable results={results} validationKey="resultado_r08" onViewDetail={setSelectedPlanilla} />}
-                    </div>
-
-                    <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 text-xs text-slate-500">
-                        Total procesados: {Object.keys(results).length} documentos
-                    </div>
-                </section>
+                </>
             )}
-
             <LogFilterTable />
-
             {selectedPlanilla && (
                 <DetallePlanilla
                     planilla={selectedPlanilla}
