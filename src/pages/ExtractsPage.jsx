@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Upload, FileText, Loader2, Plus, Calendar, FileSpreadsheet, Trash2 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -9,8 +9,10 @@ export default function ExtractsPage() {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState(null);
     const [showForm, setShowForm] = useState(false);
+    
+    // Ref to prevent double fetching
+    const hasFetched = useRef(false);
 
-    // Form State
     const [formData, setFormData] = useState({
         nombre: '',
         descripcion: '',
@@ -18,13 +20,17 @@ export default function ExtractsPage() {
     });
 
     useEffect(() => {
+        // Prevent double fetch in React Strict Mode
+        if (hasFetched.current) return;
+        hasFetched.current = true;
+        
         fetchExtracts();
     }, []);
 
     const fetchExtracts = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`${API_URL}/extractos/`);
+            const response = await fetch(`${API_URL}/extractos`);
             if (!response.ok) throw new Error('Error al cargar extractos');
             const data = await response.json();
             setExtracts(data);
@@ -66,7 +72,11 @@ export default function ExtractsPage() {
 
             if (!response.ok) throw new Error('Error al subir el extracto');
 
+            // Reset the ref to allow fetching updated data
+            hasFetched.current = false;
             await fetchExtracts();
+            hasFetched.current = true;
+            
             setShowForm(false);
             setFormData({ nombre: '', descripcion: '', file: null });
         } catch (err) {
@@ -97,7 +107,6 @@ export default function ExtractsPage() {
                 </div>
             )}
 
-            {/* Upload Form */}
             {showForm && (
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 animate-in fade-in slide-in-from-top-4">
                     <h2 className="text-lg font-semibold mb-4 text-slate-800">Subir Nuevo Extracto</h2>
@@ -160,7 +169,6 @@ export default function ExtractsPage() {
                 </div>
             )}
 
-            {/* Extracts List */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 {loading ? (
                     <div className="p-12 flex justify-center text-slate-400">
@@ -195,7 +203,7 @@ export default function ExtractsPage() {
                                         <td className="px-6 py-3 text-slate-600">
                                             <div className="flex items-center gap-2">
                                                 <Calendar size={14} className="text-slate-400" />
-                                                {new Date(extract.fecha_creacion).toLocaleDateString()}
+                                                {new Date(extract.fechaCreacion).toLocaleDateString()}
                                             </div>
                                         </td>
                                         <td className="px-6 py-3 text-right text-slate-400 font-mono text-xs">
