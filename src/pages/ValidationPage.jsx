@@ -3,6 +3,7 @@ import { Upload, FileText, Loader2, FileCheck, XCircle, AlertTriangle, LayoutLis
 import DetallePlanilla from '../components/DetallePlanilla';
 import TabButton from '../components/TabButton';
 import LogFilterTable from '../components/LogFilterTable';
+import Table from '../components/Table';
 
 const MATCH_URL = `${import.meta.env.VITE_API_URL}/log-match-bd`;
 const PROCESS_URL = `https://blockchain.validator.puygroup.com/api/v1/transactions/files/upload `;
@@ -416,7 +417,7 @@ export default function ValidationPage() {
             )}
 
             {/* Log Filter Table */}
-            <LogFilterTable />
+            <LogFilterTable extracts={extracts} loadingExtracts={loadingExtracts} />
 
             {selectedPlanilla && (
                 <DetallePlanilla
