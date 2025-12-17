@@ -1,21 +1,29 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-    Upload, FileText, Loader2, FileCheck, XCircle, AlertTriangle,
-    LayoutList, DollarSign, AlertCircle, Grid, FileSpreadsheet,
-    CheckSquare, Square, UserPlus, FileJson, PiggyBank
+    AlertTriangle, LayoutList, DollarSign, AlertCircle, Grid
 } from 'lucide-react';
-import DetallePlanilla from '../components/DetallePlanilla';
 import TabButton from '../components/TabButton';
-import R04Table from '../components/R04Table';
-import LogTable from '../components/LogTable';
-import NormativeTable from '../components/NormativeTable';
+import Table from '../components/Table';
 import LogFilterTable from '../components/LogFilterTable';
+import {
+    transformResultsToArray,
+    getR04Columns,
+    getNormativeColumns,
+    getLogColumns
+} from '../utils/ValidationPageUtils';
+import { getFoundUsersColumns } from '../utils/ValidationPage2Utils';
+import ExtractSection from '../components/validationPage/ExtractSection';
+import UploadSection from '../components/validationPage/UploadSection';
+import TotalsSection from '../components/validationPage/TotalsSection';
+import UserAlertModal from '../components/validationPage/UserAlertModal';
+import DetallePlanilla from '../components/DetallePlanilla';
+import ResultsSummary from '../components/validationPage/ResultsSummary';
 // --- ENDPOINTS ---
-const MATCH_URL = `${import.meta.env.VITE_API_URL}/log-match-bd`;
 const PROCESS_URL = `${import.meta.env.VITE_API_URL}/procesar-planilla-2`; // MIGRATED TO V2
-const EXTRACTS_URL = `${import.meta.env.VITE_API_URL}/extractos/`;
 const EXPORT_URL = `${import.meta.env.VITE_API_URL}/exportar-excel`;
+const EXTRACTS_URL = `${import.meta.env.VITE_API_URL}/extractos/`; // Unused but maybe good to keep reference? No, remove if unused.
 const EXTRACT_400_URL = `${import.meta.env.VITE_API_URL}/extraer-cuatrocientos`;
+
 export default function ValidationPage() {
     const [files, setFiles] = useState([]);
     const [results, setResults] = useState(null);
@@ -88,26 +96,29 @@ export default function ValidationPage() {
             setError("Debes seleccionar al menos un extracto para la conciliación.");
             return;
         }
-        setLoading(true); setError(null); setResults(null);
-        setFoundUsers([]); setShowUserModal(false);
-        setTotals({ acreditar: 0, rezagos: 0 }); // Reset totals
-        const formDataMatch = new FormData();
-        files.forEach(file => formDataMatch.append('archivos', file));
-        formDataMatch.append('extracto_ids', selectedExtracts.join(','));
+        setLoading(true);
+        setError(null);
+        setResults(null);
+        setFoundUsers([]);
+        setShowUserModal(false);
+        setTotals({ acreditar: 0, rezagos: 0 });
         const formDataProcess = new FormData();
         files.forEach(file => formDataProcess.append('archivos', file));
+
+        // Match the backend definition: extractoIds (camelCase)
+        // Sending as JSON string is robust for the new backend parser
+        formDataProcess.append('extractoIds', JSON.stringify(selectedExtracts));
         try {
-            // Parallel Fetch
-            const [matchResponse, processResponse] = await Promise.all([
-                fetch(MATCH_URL, { method: 'POST', body: formDataMatch }),
-                fetch(PROCESS_URL, { method: 'POST', body: formDataProcess }),
-            ]);
-            if (!matchResponse.ok) throw new Error(`Error en validación financiera: ${matchResponse.statusText}`);
-            if (!processResponse.ok) throw new Error(`Error en validación normativa: ${processResponse.statusText}`);
-            const matchData = await matchResponse.json();
+            // Single Request to PROCESS_URL
+            const processResponse = await fetch(PROCESS_URL, { method: 'POST', body: formDataProcess });
+            if (!processResponse.ok) {
+                throw new Error(`Error en validación: ${processResponse.statusText}`);
+            }
             const processDataRaw = await processResponse.json();
+            console.log(processDataRaw, "processDataRaw");
             // Extract logic from V2 response
-            const processDataDict = processDataRaw.results || [];
+            // The backend now populates match_log within 'results' when extractoIds are provided
+            const processDataDict = processDataRaw.results || {};
             const missingUsersList = processDataRaw.missing_users || [];
             const totalAcreditar = processDataRaw.total_acreditar || 0;
             const totalRezagos = processDataRaw.total_rezagos || 0;
@@ -118,16 +129,8 @@ export default function ValidationPage() {
                 setFoundUsers(missingUsersList);
                 setShowUserModal(true);
             }
-            // Merge results
-            const mergedResults = {};
-            const allFiles = new Set([...Object.keys(matchData), ...Object.keys(processDataDict)]);
-            allFiles.forEach(filename => {
-                mergedResults[filename] = {
-                    ...(processDataDict[filename] || {}), // Parsing/Validation results
-                    match_log: matchData[filename]?.match_log || null // Financial match
-                };
-            });
-            setResults(mergedResults);
+            // No need to merge separate match results anymore
+            setResults(processDataDict);
         } catch (err) {
             console.error(err);
             setError(err.message || "Error al conectar con la API");
@@ -140,10 +143,50 @@ export default function ValidationPage() {
         setShowUserModal(false);
     };
     const exportJSON = async () => {
-        if (files.length === 0) return;
+        if (files.length === 0 || !results) return;
         setLoading(true); setError(null);
+
+        // Filter files that passed ALL validations
+        const validFilenames = Object.entries(results).filter(([filename, val]) => {
+            // Check all validation keys provided in 'val'
+            // Assuming 'valido' property on each result object implies pass
+            // We need to check: R04, Matriz, LogMatch, R05, R06, R07, R08?
+            // Let's check the structure. Usually 'valido' is on the top-level of specific result objects
+            // Looking at utils/ValidationPageUtils.jsx, we access row.resultado_r04?.valido, row.resultado_matriz?.valido, etc.
+            // Also row.match_log?.valido.
+
+            // List of keys to check for validity:
+            const keysToCheck = [
+                'resultado_r04',
+                'resultado_matriz',
+                'match_log',
+                'resultado_r05',
+                'resultado_r06',
+                'resultado_r07',
+                'resultado_r08'
+            ];
+
+            // If any key exists and is NOT valid, then fail.
+            // If key is missing, is it valid or invalid? Assume missing key = skip or passed?
+            // Usually if result exists it returns the key.
+            return keysToCheck.every(key => {
+                if (!val[key]) return true; // If validation not present, ignore? Or maybe it wasn't run?
+                // For log match, key is match_log
+                return val[key].valido === true;
+            });
+        }).map(([filename]) => filename);
+
+        const filesToExport = files.filter(f => validFilenames.includes(f.name));
+
+        if (filesToExport.length === 0) {
+            setError("No hay archivos que hayan pasado todas las validaciones para exportar.");
+            setLoading(false);
+            return;
+        }
+
         const formData = new FormData();
-        files.forEach(file => formData.append('archivos', file));
+        filesToExport.forEach(file => formData.append('archivos', file));
+
         try {
             const response = await fetch(EXTRACT_400_URL, { method: 'POST', body: formData });
             if (!response.ok) throw new Error(`Error del servidor: ${response.statusText}`);
@@ -154,7 +197,7 @@ export default function ValidationPage() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = "extraccion_400.json";
+            a.download = "extraccion_400_validos.json";
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -197,6 +240,16 @@ export default function ValidationPage() {
             return acc + (!curr[key]?.valido ? 1 : 0);
         }, 0);
     };
+
+    // Calculate Stats
+    const totalTransactions = results ? Object.keys(results).length : 0;
+    const validTransactions = results ? Object.values(results).filter(val => {
+        const keysToCheck = [
+            'resultado_r04', 'resultado_matriz', 'match_log',
+            'resultado_r05', 'resultado_r06', 'resultado_r07', 'resultado_r08'
+        ];
+        return keysToCheck.every(key => !val[key] || val[key].valido === true);
+    }).length : 0;
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -206,183 +259,32 @@ export default function ValidationPage() {
                 </div>
             </div>
             {/* --- USER ALERT MODAL --- */}
-            {showUserModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 animate-in fade-in zoom-in duration-200">
-                        <div className="flex items-center gap-3 text-amber-600 mb-4">
-                            <AlertTriangle size={32} />
-                            {/* Title Update */}
-                            <h2 className="text-xl font-bold text-slate-800">Actualización de Usuarios Requerida</h2>
-                        </div>
-                        {/* Message Update */}
-                        <p className="text-slate-600 mb-4">
-                            La información de los siguientes usuarios registrados no coincide con SIAFP y debe ser actualizada.
-                        </p>
-                        <div className="bg-slate-50 rounded-lg border border-slate-200 max-h-[300px] overflow-y-auto mb-6">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-100 text-slate-500 font-medium">
-                                    <tr>
-                                        <th className="px-4 py-2">Documento</th>
-                                        <th className="px-4 py-2">Razón Social / Nombre</th>
-                                        <th className="px-4 py-2">Archivo Origen</th>
-                                        <th className="px-4 py-2 text-center">En Puy</th>
-                                        <th className="px-4 py-2 text-center">En SIAFP</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200">
-                                    {foundUsers.map((u, i) => (
-                                        <tr key={i}>
-                                            <td className="px-4 py-2 font-mono text-slate-600">{u.tipo_documento} {u.num_documento}</td>
-                                            <td className="px-4 py-2 font-medium text-slate-800">{u.nombre}</td>
-                                            <td className="px-4 py-2 text-slate-500 text-xs">{u.archivo_origen}</td>
-
-                                            {/* ADDED CELLS */}
-                                            <td className="px-4 py-2 text-center">
-                                                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${u.en_puy === 'Skandia' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                    {u.en_puy || 'N/A'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-2 text-center">
-                                                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${u.en_siafp === 'Skandia' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                                                    }`}>
-                                                    {u.en_siafp || 'N/A'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="flex justify-end gap-3">
-                            <button
-                                onClick={() => setShowUserModal(false)}
-                                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
-                            >
-                                Cerrar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* --- USER ALERT MODAL --- */}
+            <UserAlertModal
+                isOpen={showUserModal}
+                onClose={() => setShowUserModal(false)}
+                users={foundUsers}
+            />
+            {/* --- SECTIONS --- */}
             <div className="flex flex-col gap-6">
-                {/* Extract Selection */}
-                <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                        <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                            <DollarSign size={20} className="text-blue-600" />
-                            Seleccionar Extractos
-                        </h2>
-                        <button
-                            onClick={toggleAllExtracts}
-                            className="text-sm font-medium text-blue-600 hover:text-blue-800 px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
-                        >
-                            {selectedExtracts.length === extracts.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
-                        </button>
-                    </div>
-                    <div className="p-4 max-h-[300px] overflow-y-auto">
-                        {loadingExtracts ? (
-                            <div className="p-8 flex justify-center text-slate-400">
-                                <Loader2 size={24} className="animate-spin" />
-                            </div>
-                        ) : extracts.length === 0 ? (
-                            <div className="p-8 text-center text-slate-500 text-sm">
-                                No hay extractos disponibles.
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {extracts.map(extract => (
-                                    <div
-                                        key={extract.id}
-                                        onClick={() => toggleExtract(extract.id)}
-                                        className={`p-4 rounded-lg border cursor-pointer transition-all flex items-start gap-3
-                      ${selectedExtracts.includes(extract.id)
-                                                ? 'bg-blue-50 border-blue-200 shadow-sm'
-                                                : 'bg-white border-slate-100 hover:border-blue-200 hover:bg-slate-50'
-                                            }
-                    `}
-                                    >
-                                        <div className={`mt-0.5 ${selectedExtracts.includes(extract.id) ? 'text-blue-600' : 'text-slate-300'}`}>
-                                            {selectedExtracts.includes(extract.id) ? <CheckSquare size={20} /> : <Square size={20} />}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="font-medium text-base text-slate-900 truncate">{extract.nombre}</div>
-                                            <div className="text-sm text-slate-500 truncate">{extract.descripcion || 'Sin descripción'}</div>
-                                            <div className="text-xs text-slate-400 mt-1">
-                                                {new Date(extract.fecha_creacion).toLocaleDateString()}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </section>
-                {/* Upload Section */}
-                <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="p-6">
-                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-800">
-                            <Upload size={20} className="text-blue-600" />
-                            Cargar Archivos PILA
-                        </h2>
-                        <div
-                            className={`relative border-2 border-dashed rounded-xl p-8 transition-colors text-center ${dragActive ? "border-blue-500 bg-blue-50" : "border-slate-300 hover:border-blue-400 hover:bg-slate-50"
-                                }`}
-                            onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
-                        >
-                            <input type="file" multiple accept=".txt" onChange={handleChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                            <div className="flex flex-col items-center gap-3 pointer-events-none">
-                                <div className="bg-blue-100 p-3 rounded-full text-blue-600">
-                                    <FileText size={32} />
-                                </div>
-                                <div>
-                                    <p className="font-medium text-slate-700">Arrastra archivos aquí o haz clic</p>
-                                    <p className="text-sm text-slate-500 mt-1">Soporta múltiples archivos .txt</p>
-                                </div>
-                            </div>
-                        </div>
-                        {files.length > 0 && (
-                            <div className="mt-6 space-y-4">
-                                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                                    <div className="text-sm font-medium text-slate-500 uppercase tracking-wider">Archivos ({files.length})</div>
-                                </div>
-                                <div className="flex flex-wrap gap-2 max-h-[200px] overflow-y-auto p-1">
-                                    {files.map((file, index) => (
-                                        <div key={index} className="flex items-center gap-2 bg-slate-100 pl-3 pr-2 py-1.5 rounded-full border border-slate-200 text-sm">
-                                            <span className="truncate max-w-[150px] text-slate-700">{file.name}</span>
-                                            <button onClick={() => removeFile(index)} className="text-slate-400 hover:text-red-500 transition-colors">
-                                                <XCircle size={16} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="flex justify-end gap-3 pt-2">
-                                    <button
-                                        onClick={exportJSON}
-                                        disabled={loading}
-                                        className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-lg font-medium shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
-                                    >
-                                        <FileJson size={18} /> Exportar JSON
-                                    </button>
-                                    <button
-                                        onClick={exportExcel}
-                                        disabled={loading}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-medium shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
-                                    >
-                                        <FileSpreadsheet size={18} /> Exportar Excel
-                                    </button>
-                                    <button
-                                        onClick={() => processFiles()}
-                                        disabled={loading}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
-                                    >
-                                        {loading ? <><Loader2 size={18} className="animate-spin" /> Procesando...</> : <><FileCheck size={18} /> Conciliar</>}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </section>
+                <ExtractSection
+                    extracts={extracts}
+                    selectedExtracts={selectedExtracts}
+                    loading={loadingExtracts}
+                    onToggleExtract={toggleExtract}
+                    onToggleAll={toggleAllExtracts}
+                />
+
+                <UploadSection
+                    files={files}
+                    dragActive={dragActive}
+                    handleDrag={handleDrag}
+                    handleDrop={handleDrop}
+                    handleChange={handleChange}
+                    removeFile={removeFile}
+                    loading={loading}
+                    processFiles={processFiles}
+                />
             </div>
             {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-start gap-3">
@@ -392,6 +294,13 @@ export default function ValidationPage() {
             )}
             {results && (
                 <>
+                    <ResultsSummary
+                        validCount={validTransactions}
+                        totalCount={totalTransactions}
+                        onExportExcel={exportExcel}
+                        onExportJSON={exportJSON}
+                        loading={loading}
+                    />
                     <section className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[500px]">
                         <div className="flex overflow-x-auto border-b border-slate-200 scrollbar-hide">
                             <TabButton
@@ -445,50 +354,46 @@ export default function ValidationPage() {
                             />
                         </div>
                         <div className="p-0 flex-1">
-                            {activeTab === 'R04' && <R04Table results={results} onViewDetail={setSelectedPlanilla} />}
-                            {activeTab === 'MATRIZ' && <NormativeTable results={results} validationKey="resultado_matriz" onViewDetail={setSelectedPlanilla} />}
-                            {activeTab === 'LOG' && <LogTable results={results} onViewDetail={setSelectedPlanilla} />}
-                            {activeTab === 'R05' && <NormativeTable results={results} validationKey="resultado_r05" onViewDetail={setSelectedPlanilla} />}
-                            {activeTab === 'R06' && <NormativeTable results={results} validationKey="resultado_r06" onViewDetail={setSelectedPlanilla} />}
-                            {activeTab === 'R07' && <NormativeTable results={results} validationKey="resultado_r07" onViewDetail={setSelectedPlanilla} />}
-                            {activeTab === 'R08' && <NormativeTable results={results} validationKey="resultado_r08" onViewDetail={setSelectedPlanilla} />}
+                            {activeTab === 'R04' && <Table
+                                data={transformResultsToArray(results)}
+                                columns={getR04Columns(setSelectedPlanilla)}
+                                emptyMessage="No hay resultados de consistencia R04"
+                            />}
+                            {activeTab === 'MATRIZ' && <Table
+                                data={transformResultsToArray(results)}
+                                columns={getNormativeColumns('resultado_matriz', setSelectedPlanilla)}
+                                emptyMessage="No hay resultados normativos"
+                            />}
+                            {activeTab === 'LOG' && <Table
+                                data={transformResultsToArray(results)}
+                                columns={getLogColumns(setSelectedPlanilla)}
+                                emptyMessage="No hay resultados de cruce financiero"
+                            />}
+                            {activeTab === 'R05' && <Table
+                                data={transformResultsToArray(results)}
+                                columns={getNormativeColumns('resultado_r05', setSelectedPlanilla)}
+                            />}
+                            {activeTab === 'R06' && <Table
+                                data={transformResultsToArray(results)}
+                                columns={getNormativeColumns('resultado_r06', setSelectedPlanilla)}
+                            />}
+                            {activeTab === 'R07' && <Table
+                                data={transformResultsToArray(results)}
+                                columns={getNormativeColumns('resultado_r07', setSelectedPlanilla)}
+                            />}
+                            {activeTab === 'R08' && <Table
+                                data={transformResultsToArray(results)}
+                                columns={getNormativeColumns('resultado_r08', setSelectedPlanilla)}
+                            />}
                         </div>
                         <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 text-xs text-slate-500">
                             Total procesados: {Object.keys(results).length} documentos
                         </div>
                     </section>
-                    {/* --- TOTALS SECTION --- */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-6 flex items-center justify-between">
-                            <div>
-                                <p className="text-green-600 font-medium mb-1 flex items-center gap-2">
-                                    <CheckSquare size={18} /> Total Acreditar
-                                </p>
-                                <h3 className="text-3xl font-bold text-green-700">
-                                    ${totals.acreditar.toLocaleString('es-CO', { minimumFractionDigits: 0 })}
-                                </h3>
-                            </div>
-                            <div className="bg-green-100 p-3 rounded-full text-green-600">
-                                <DollarSign size={32} />
-                            </div>
-                        </div>
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-center justify-between">
-                            <div>
-                                <p className="text-amber-600 font-medium mb-1 flex items-center gap-2">
-                                    <AlertCircle size={18} /> Total Rezagos
-                                </p>
-                                <h3 className="text-3xl font-bold text-amber-700">
-                                    ${totals.rezagos.toLocaleString('es-CO', { minimumFractionDigits: 0 })}
-                                </h3>
-                            </div>
-                            <div className="bg-amber-100 p-3 rounded-full text-amber-600">
-                                <PiggyBank size={32} />
-                            </div>
-                        </div>
-                    </div>
+                    <TotalsSection totals={totals} />
                 </>
             )}
-            <LogFilterTable />
+            <LogFilterTable extracts={extracts} loadingExtracts={loadingExtracts} />
             {selectedPlanilla && (
                 <DetallePlanilla
                     planilla={selectedPlanilla}

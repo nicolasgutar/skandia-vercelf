@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Filter, ChevronLeft, ChevronRight, Loader2, Search } from 'lucide-react';
+import { Filter, Search, Loader2 } from 'lucide-react';
 import { formatCurrency } from '../utils/helpers';
+import Table from './Table';
 
 const API_URL = `${import.meta.env.VITE_API_URL}/query-log`;
 
@@ -37,12 +38,12 @@ const RangeFilterInput = ({ min, max, onMinChange, onMaxChange, placeholderMin, 
     </div>
 );
 
-export default function LogFilterTable() {
-    const [extracts, setExtracts] = useState([]);
+export default function LogFilterTable({ extracts = [], loadingExtracts = false }) {
+    // const [extracts, setExtracts] = useState([]); // REMOVED: Received as prop
     const [selectedExtractId, setSelectedExtractId] = useState('');
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [loadingExtracts, setLoadingExtracts] = useState(false);
+    // const [loadingExtracts, setLoadingExtracts] = useState(false); // REMOVED
     const [pagination, setPagination] = useState({
         page: 1,
         page_size: 10,
@@ -67,26 +68,12 @@ export default function LogFilterTable() {
     const [activeFilter, setActiveFilter] = useState(null);
     const [debouncedFilters, setDebouncedFilters] = useState(filters);
 
-    // Fetch Extracts on Mount
+    // Auto-select first extract when available
     useEffect(() => {
-        const fetchExtracts = async () => {
-            setLoadingExtracts(true);
-            try {
-                const response = await fetch(`${import.meta.env.VITE_API_URL}/extractos/`);
-                if (!response.ok) throw new Error('Error al cargar extractos');
-                const data = await response.json();
-                setExtracts(data);
-                if (data.length > 0) {
-                    setSelectedExtractId(data[0].id); // Select first by default
-                }
-            } catch (err) {
-                console.error("Error fetching extracts:", err);
-            } finally {
-                setLoadingExtracts(false);
-            }
-        };
-        fetchExtracts();
-    }, []);
+        if (extracts.length > 0 && !selectedExtractId) {
+            setSelectedExtractId(extracts[0].id);
+        }
+    }, [extracts, selectedExtractId]);
 
     // Debounce filter changes
     useEffect(() => {
@@ -227,107 +214,55 @@ export default function LogFilterTable() {
                 </div>
             </div>
 
-            <div className="overflow-x-auto min-h-[400px]">
-                <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                        <tr>
-                            {columns.map((col) => (
-                                <th
-                                    key={col.key}
-                                    className="px-4 py-2 relative group cursor-pointer hover:bg-slate-100 transition-colors"
-                                    onMouseEnter={() => setActiveFilter(col.key)}
-                                    onMouseLeave={() => setActiveFilter(null)}
-                                >
-                                    <div className="flex items-center gap-1">
-                                        {col.label}
-                                        <Filter size={12} className={`text-slate-400 ${isFilterActive(col) ? 'text-blue-600' : 'opacity-0 group-hover:opacity-100'}`} />
-                                    </div>
-
-                                    {activeFilter === col.key && (
-                                        col.isRange ? (
-                                            <RangeFilterInput
-                                                min={filters[col.minKey]}
-                                                max={filters[col.maxKey]}
-                                                onMinChange={(val) => handleFilterChange(col.minKey, val)}
-                                                onMaxChange={(val) => handleFilterChange(col.maxKey, val)}
-                                                placeholderMin={col.placeholderMin}
-                                                placeholderMax={col.placeholderMax}
-                                                type={col.type || 'number'}
-                                            />
-                                        ) : (
-                                            <FilterInput
-                                                value={filters[col.filterKey || col.key]}
-                                                onChange={(val) => handleFilterChange(col.filterKey || col.key, val)}
-                                                placeholder={`Filtrar ${col.label}...`}
-                                                type={col.type || 'text'}
-                                            />
-                                        )
-                                    )}
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {loading ? (
-                            <tr>
-                                <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-500">
-                                    <div className="flex justify-center items-center gap-2">
-                                        <Loader2 size={20} className="animate-spin text-blue-600" />
-                                        Cargando datos...
-                                    </div>
-                                </td>
-                            </tr>
-                        ) : !selectedExtractId ? (
-                            <tr>
-                                <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-500">
-                                    Seleccione un extracto para ver los registros.
-                                </td>
-                            </tr>
-                        ) : data.length === 0 ? (
-                            <tr>
-                                <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-500">
-                                    No se encontraron registros
-                                </td>
-                            </tr>
-                        ) : (
-                            data.map((row, idx) => (
-                                <tr key={idx} className="hover:bg-slate-50">
-                                    {columns.map(col => (
-                                        <td key={col.key} className="px-4 py-2 font-mono text-slate-600">
-                                            {col.isCurrency ? formatCurrency(row[col.key]) : row[col.key]}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Pagination */}
-            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex items-center justify-between">
-                <div className="text-xs text-slate-500">
-                    Mostrando {((pagination.page - 1) * pagination.page_size) + 1} a {Math.min(pagination.page * pagination.page_size, pagination.total_records)} de {pagination.total_records} registros
-                </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
-                        disabled={pagination.page === 1 || loading}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-600"
-                    >
-                        <ChevronLeft size={18} />
-                    </button>
-                    <span className="text-xs font-medium text-slate-700">
-                        Página {pagination.page} de {pagination.total_pages || 1}
-                    </span>
-                    <button
-                        onClick={() => setPagination(prev => ({ ...prev, page: Math.min(pagination.total_pages, prev.page + 1) }))}
-                        disabled={pagination.page >= pagination.total_pages || loading}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-600"
-                    >
-                        <ChevronRight size={18} />
-                    </button>
-                </div>
+            {/* Refactored Table */}
+            <div className="flex-1 flex flex-col min-h-[400px]">
+                <Table
+                    columns={columns.map(col => ({
+                        key: col.key,
+                        header: (
+                            <div className="flex items-center gap-1">
+                                {col.label}
+                                <Filter size={12} className={`text-slate-400 ${isFilterActive(col) ? 'text-blue-600' : 'opacity-0 group-hover:opacity-100'}`} />
+                                {activeFilter === col.key && (
+                                    col.isRange ? (
+                                        <RangeFilterInput
+                                            min={filters[col.minKey]}
+                                            max={filters[col.maxKey]}
+                                            onMinChange={(val) => handleFilterChange(col.minKey, val)}
+                                            onMaxChange={(val) => handleFilterChange(col.maxKey, val)}
+                                            placeholderMin={col.placeholderMin}
+                                            placeholderMax={col.placeholderMax}
+                                            type={col.type || 'number'}
+                                        />
+                                    ) : (
+                                        <FilterInput
+                                            value={filters[col.filterKey || col.key]}
+                                            onChange={(val) => handleFilterChange(col.filterKey || col.key, val)}
+                                            placeholder={`Filtrar ${col.label}...`}
+                                            type={col.type || 'text'}
+                                        />
+                                    )
+                                )}
+                            </div>
+                        ),
+                        headerProps: {
+                            onMouseEnter: () => setActiveFilter(col.key),
+                            onMouseLeave: () => setActiveFilter(null)
+                        },
+                        className: "relative group cursor-pointer hover:bg-slate-100 transition-colors",
+                        cellClassName: "font-mono text-slate-600",
+                        render: (row) => col.isCurrency ? formatCurrency(row[col.key]) : row[col.key]
+                    }))}
+                    data={data}
+                    loading={loading}
+                    currentPage={pagination.page}
+                    totalPages={pagination.total_pages}
+                    totalItems={pagination.total_records}
+                    onPageChange={(p) => setPagination(prev => ({ ...prev, page: p }))}
+                    itemsPerPage={pagination.page_size}
+                    className="border-none shadow-none"
+                    emptyMessage={!selectedExtractId ? "Seleccione un extracto para ver los registros." : "No se encontraron registros"}
+                />
             </div>
         </section>
     );
