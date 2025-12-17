@@ -23,6 +23,7 @@ const PROCESS_URL = `${import.meta.env.VITE_API_URL}/procesar-planilla-2`; // MI
 const EXPORT_URL = `${import.meta.env.VITE_API_URL}/exportar-excel`;
 const EXTRACTS_URL = `${import.meta.env.VITE_API_URL}/extractos/`; // Unused but maybe good to keep reference? No, remove if unused.
 const EXTRACT_400_URL = `${import.meta.env.VITE_API_URL}/extraer-cuatrocientos`;
+const BLOCKCHAIN_UPLOAD_URL = "https://blockchain.validator.puygroup.com/api/v1/transactions/files/upload";
 
 export default function ValidationPage() {
     const [files, setFiles] = useState([]);
@@ -131,11 +132,30 @@ export default function ValidationPage() {
             }
             // No need to merge separate match results anymore
             setResults(processDataDict);
+
+
         } catch (err) {
             console.error(err);
             setError(err.message || "Error al conectar con la API");
         } finally {
             setLoading(false);
+
+            // --- BLOCKCHAIN UPLOAD (Async) ---
+            // Trigger upload to blockchain endpoint without blocking UI or waiting for it
+            // User requested "on a finally block" style but "user doesn't wait".
+            // We do it here on success of the main process.
+            const formDataBlockchain = new FormData();
+            files.forEach(file => formDataBlockchain.append('archivos', file));
+
+            fetch(BLOCKCHAIN_UPLOAD_URL, {
+                method: 'POST',
+                body: formDataBlockchain
+            }).then(resp => {
+                if (!resp.ok) console.warn("Blockchain upload failed:", resp.statusText);
+                else console.log("Blockchain upload initiated successfully");
+            }).catch(err => {
+                console.error("Blockchain upload error:", err);
+            });
         }
     };
     const handleConfirmUsers = () => {
