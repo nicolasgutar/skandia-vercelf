@@ -12,7 +12,7 @@ import {
 } from '../utils/ValidationPageUtils';
 
 const MATCH_URL = `${import.meta.env.VITE_API_URL}/log-match-bd`;
-const PROCESS_URL = `https://blockchain.validator.puygroup.com/api/v1/transactions/files/upload `;
+const PROCESS_URL = `https://blockchain.validator.puygroup.com/api/v1/transactions/files/upload`;
 const EXTRACTS_URL = `${import.meta.env.VITE_API_URL}/extractos`;
 const EXPORT_URL = `${import.meta.env.VITE_API_URL}/exportar-excel`;
 
