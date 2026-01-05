@@ -117,7 +117,7 @@ export default function AccreditationPage() {
                                 <div className="text-2xl font-bold text-emerald-600">{formatMoney(s.saldo_operacional)}</div>
                             </div>
                             <div className="pt-2 border-t border-slate-100">
-                                <div className="text-xs text-slate-500">Rezagos</div>
+                                <div className="text-xs text-slate-500">Corrección de Errores</div>
                                 <div className="text-lg font-semibold text-amber-600">{formatMoney(s.saldo_rezagos)}</div>
                             </div>
                         </div>

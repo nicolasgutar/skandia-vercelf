@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutList, FileSpreadsheet, Activity, Blocks, Users } from 'lucide-react';
+import { LayoutList, FileSpreadsheet, Activity, Blocks, Users, AlertCircle, DollarSign } from 'lucide-react';
 
 export default function Layout() {
     return (
@@ -57,7 +57,7 @@ export default function Layout() {
                                     Blockchain
                                 </NavLink>
                                 <NavLink
-                                    to="/validacion2"
+                                    to="/rezagos"
                                     className={({ isActive }) =>
                                         `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors
                                         ${isActive
@@ -66,8 +66,21 @@ export default function Layout() {
                                         }`
                                     }
                                 >
-                                    <Users size={18} className="mr-2" />
-                                    Val con Usuarios (Prueba)
+                                    <AlertCircle size={18} className="mr-2" />
+                                    Correccion Errores
+                                </NavLink>
+                                <NavLink
+                                    to="/conciliaciones"
+                                    className={({ isActive }) =>
+                                        `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors
+                                        ${isActive
+                                            ? 'border-blue-500 text-gray-900'
+                                            : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                                        }`
+                                    }
+                                >
+                                    <DollarSign size={18} className="mr-2" />
+                                    Conciliaciones
                                 </NavLink>
                             </div>
                         </div>

@@ -37,6 +37,7 @@ const Table = ({
     totalPages: externalTotalPages,
     onPageChange: externalOnPageChange,
     totalItems: externalTotalItems,
+    rowClassName,
 }) => {
     const [internalPage, setInternalPage] = useState(1);
 
@@ -120,7 +121,13 @@ const Table = ({
                                 }
 
                                 return (
-                                    <tr key={rowKey} className="hover:bg-slate-50 transition-colors align-top">
+                                    <tr
+                                        key={rowKey}
+                                        className={`hover:bg-slate-50 transition-colors align-top ${typeof rowClassName === 'function'
+                                            ? rowClassName(row, rowIndex)
+                                            : rowClassName || ''
+                                            }`}
+                                    >
                                         {columns.map((col, colIndex) => (
                                             <td
                                                 key={colIndex}

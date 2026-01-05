@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-    AlertTriangle, LayoutList, DollarSign, AlertCircle, Grid, Filter, Clock, HardHat, Settings
+    AlertTriangle, LayoutList, DollarSign, AlertCircle, Grid, Filter, Clock, HardHat, Settings, CheckCircle
 } from 'lucide-react';
 import TabButton from '../components/TabButton';
 import Table from '../components/Table';
@@ -53,6 +53,7 @@ export default function ValidationPage() {
     const [foundUsers, setFoundUsers] = useState([]);
     const [severityFilter, setSeverityFilter] = useState('ALL');
     const [totals, setTotals] = useState({ acreditar: 0, rezagos: 0 });
+    const [completedTasks, setCompletedTasks] = useState(new Set());
 
     useEffect(() => {
         fetchExtracts();
@@ -70,6 +71,21 @@ export default function ValidationPage() {
         } finally {
             setLoadingExtracts(false);
         }
+    };
+
+    // --- MANEJO DE COMPLETADO ---
+    const handleTaskCompletion = (taskId) => {
+        setCompletedTasks(prev => new Set(prev).add(taskId));
+
+        // Esperar a la animación y luego eliminar
+        setTimeout(() => {
+            setFoundUsers(prev => prev.filter(u => u._id !== taskId));
+            setCompletedTasks(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(taskId);
+                return newSet;
+            });
+        }, 500); // 500ms coincide con duration-500 de CSS si usamos transition
     };
 
     // --- FILTRADO DE REZAGOS ---
@@ -152,7 +168,8 @@ export default function ValidationPage() {
                         siafp_codigo: siafpDetails.codigo,
                         siafp_severidad: siafpDetails.severidad,
                         siafp_significado: siafpDetails.significado,
-                        siafp_accion: siafpDetails.accion
+                        siafp_accion: siafpDetails.accion,
+                        _id: user.tipo_documento + '-' + user.num_documento + '-' + user.archivo_origen + '-' + Math.random().toString(36).substr(2, 9)
                     };
                 });
                 setFoundUsers(enrichedUsers);
@@ -262,11 +279,13 @@ export default function ValidationPage() {
                         </div>
 
                         <div className="p-0 flex-1">
-                            {/* Renderizado de tablas por Tab... igual que tu código original */}
                             {activeTab === 'R04' && <Table data={transformResultsToArray(results)} columns={getR04Columns(setSelectedPlanilla)} />}
                             {activeTab === 'MATRIZ' && <Table data={transformResultsToArray(results)} columns={getNormativeColumns('resultado_matriz', setSelectedPlanilla)} />}
                             {activeTab === 'LOG' && <Table data={transformResultsToArray(results)} columns={getLogColumns(setSelectedPlanilla)} />}
-                            {/* ... R05, R06, R07, R08 */}
+                            {activeTab === 'R05' && <Table data={transformResultsToArray(results)} columns={getNormativeColumns('resultado_r05', setSelectedPlanilla)} />}
+                            {activeTab === 'R06' && <Table data={transformResultsToArray(results)} columns={getNormativeColumns('resultado_r06', setSelectedPlanilla)} />}
+                            {activeTab === 'R07' && <Table data={transformResultsToArray(results)} columns={getNormativeColumns('resultado_r07', setSelectedPlanilla)} />}
+                            {activeTab === 'R08' && <Table data={transformResultsToArray(results)} columns={getNormativeColumns('resultado_r08', setSelectedPlanilla)} />}
                         </div>
 
                         <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 text-xs text-slate-500">
@@ -288,7 +307,7 @@ export default function ValidationPage() {
                                     <AlertTriangle size={24} />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-slate-800">Gestión de Rezagos (SIAFP)</h3>
+                                    <h3 className="text-lg font-bold text-slate-800">Gestión de Corrección de Errores (SIAFP)</h3>
                                     <p className="text-slate-500 text-sm">
                                         Registros que requieren acciones específicas para ser procesados.
                                     </p>
@@ -323,10 +342,31 @@ export default function ValidationPage() {
                     <div className="p-0">
                         <Table
                             data={filteredUsers}
-                            columns={getFoundUsersColumns(SEVERITY_CONFIG)}
+                            columns={[
+                                ...getFoundUsersColumns(SEVERITY_CONFIG),
+                                {
+                                    header: "Completar",
+                                    className: "text-center w-24",
+                                    render: u => (
+                                        <div className="flex justify-center">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleTaskCompletion(u._id);
+                                                }}
+                                                className="p-1 rounded-full hover:bg-green-100 text-slate-400 hover:text-green-600 transition-all"
+                                                title="Marcar como completado"
+                                            >
+                                                <CheckCircle size={20} />
+                                            </button>
+                                        </div>
+                                    )
+                                }
+                            ]}
                             itemsPerPage={10}
                             className="border-none shadow-none bg-transparent"
-                            emptyMessage="No hay rezagos para la categoría seleccionada"
+                            emptyMessage="No hay correcciones de errores para la categoría seleccionada"
+                            rowClassName={(u) => completedTasks.has(u._id) ? "line-through opacity-40 bg-green-50 scale-[0.98] transition-all duration-500 ease-in-out" : "transition-all duration-500 ease-in-out"}
                         />
                     </div>
                 </div>

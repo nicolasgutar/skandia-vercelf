@@ -20,7 +20,7 @@ const TotalsSection = ({ totals }) => {
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-center justify-between">
                 <div>
                     <p className="text-amber-600 font-medium mb-1 flex items-center gap-2">
-                        <AlertCircle size={18} /> Total Rezagos
+                        <AlertCircle size={18} /> Total Corrección Errores
                     </p>
                     <h3 className="text-3xl font-bold text-amber-700">
                         ${totals.rezagos.toLocaleString('es-CO', { minimumFractionDigits: 0 })}
