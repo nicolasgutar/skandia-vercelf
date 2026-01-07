@@ -143,12 +143,6 @@ export default function ConciliacionesPage() {
                     <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Conciliaciones</h1>
                     <p className="text-slate-500 font-medium mt-1">Gobernanza y cuadre financiero entre recaudos y reportes</p>
                 </div>
-                <div className="flex gap-2">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all shadow-sm">
-                        <Download size={18} />
-                        Exportar Reporte
-                    </button>
-                </div>
             </div>
 
             {/* Premium Cierre Contable Card */}

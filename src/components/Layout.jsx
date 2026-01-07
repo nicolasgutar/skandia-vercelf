@@ -80,7 +80,7 @@ export default function Layout() {
                                     }
                                 >
                                     <DollarSign size={18} className="mr-2" />
-                                    Conciliaciones
+                                    Acreditable
                                 </NavLink>
                             </div>
                         </div>
