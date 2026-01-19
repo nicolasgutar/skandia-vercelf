@@ -1,5 +1,87 @@
 import React from 'react';
 
+export const exportToJSON = async (files, results, setLoading, setError, EXTRACT_400_URL) => {
+    if (files.length === 0 || !results) return;
+    setLoading(true); setError(null);
+
+    // Filter files that passed ALL validations
+    const validFilenames = Object.entries(results).filter(([filename, val]) => {
+        const keysToCheck = [
+            'resultado_r04',
+            'resultado_matriz',
+            'match_log',
+            'resultado_r05',
+            'resultado_r06',
+            'resultado_r07',
+            'resultado_r08'
+        ];
+
+        return keysToCheck.every(key => {
+            if (!val[key]) return true;
+            return val[key].valido === true;
+        });
+    }).map(([filename]) => filename);
+
+    const filesToExport = files.filter(f => validFilenames.includes(f.name));
+
+    if (filesToExport.length === 0) {
+        setError("No hay archivos que hayan pasado todas las validaciones para exportar.");
+        setLoading(false);
+        return;
+    }
+
+    const formData = new FormData();
+    filesToExport.forEach(file => formData.append('archivos', file));
+
+    try {
+        const response = await fetch(EXTRACT_400_URL, { method: 'POST', body: formData });
+        if (!response.ok) throw new Error(`Error del servidor: ${response.statusText}`);
+        const data = await response.json();
+        // Create a blob from the JSON data and trigger download
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: "application/json" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "extraccion_400_validos.json";
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (err) {
+        console.error(err);
+        setError(err.message || "Error al exportar JSON");
+    } finally {
+        setLoading(false);
+    }
+};
+
+export const exportToExcel = async (files, setLoading, setError, EXPORT_URL) => {
+    if (files.length === 0) return;
+    setLoading(true); setError(null);
+    const formData = new FormData();
+    files.forEach(file => formData.append('archivos', file));
+    try {
+        const response = await fetch(EXPORT_URL, { method: 'POST', body: formData });
+        if (!response.ok) throw new Error(`Error del servidor: ${response.statusText}`);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "reporte_validacion.xlsx";
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (err) {
+        console.error(err);
+        setError(err.message || "Error al exportar Excel");
+    } finally {
+        setLoading(false);
+    }
+};
+
+
 // --- CONFIGURACIÓN DE ESTILOS POR SEVERIDAD ---
 const SEVERITY_STYLES = {
     'A': 'bg-red-100 text-red-700 border-red-200',

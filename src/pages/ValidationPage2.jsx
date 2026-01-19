@@ -12,7 +12,8 @@ import {
     getLogColumns
 } from '../utils/ValidationPageUtils';
 // Importamos la función de columnas actualizada
-import { getFoundUsersColumns } from '../utils/ValidationPage2Utils';
+import { getFoundUsersColumns, exportToJSON, exportToExcel } from '../utils/ValidationPage2Utils';
+
 import ExtractSection from '../components/validationPage/ExtractSection';
 import UploadSection from '../components/validationPage/UploadSection';
 import TotalsSection from '../components/validationPage/TotalsSection';
@@ -196,13 +197,9 @@ export default function ValidationPage() {
     };
 
     // --- EXPORTS ---
-    const exportJSON = async () => {
-        // ... (Tu lógica de exportar JSON actual se mantiene igual)
-    };
+    const exportJSON = () => exportToJSON(files, results, setLoading, setError, EXTRACT_400_URL);
+    const exportExcel = () => exportToExcel(files, setLoading, setError, EXPORT_URL);
 
-    const exportExcel = async () => {
-        // ... (Tu lógica de exportar Excel actual se mantiene igual)
-    };
 
     const getAlertCount = (key) => {
         if (!results) return 0;
