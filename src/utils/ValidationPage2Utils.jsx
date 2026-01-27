@@ -37,17 +37,26 @@ export const exportToJSON = async (files, results, setLoading, setError, EXTRACT
         const response = await fetch(EXTRACT_400_URL, { method: 'POST', body: formData });
         if (!response.ok) throw new Error(`Error del servidor: ${response.statusText}`);
         const data = await response.json();
-        // Create a blob from the JSON data and trigger download
-        const jsonString = JSON.stringify(data, null, 2);
-        const blob = new Blob([jsonString], { type: "application/json" });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = "extraccion_400_validos.json";
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+
+        // Generate timestamp in format yyyy#mm#dd-hh#mm#ss
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+        // Download each CSV file separately
+        const csvKeys = ["A6AKCPP", "A6AMCPP", "A6ALCPP"];
+        for (const key of csvKeys) {
+            if (data[key]) {
+                const blob = new Blob([data[key]], { type: "text/csv" });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${key}_${timestamp}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }
+        }
     } catch (err) {
         console.error(err);
         setError(err.message || "Error al exportar JSON");
